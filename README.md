@@ -20,5 +20,5 @@
 
 1. **โคลนโปรเจกต์หรือดาวน์โหลดไฟล์**
    ```bash
-   git clone [https://github.com/kittiphan678/mini-pos.git](https://github.com/kittiphan678/mini-pos.git)
+   git clone [https://github.com/Kittiphan678/Mini-POS.git)
    cd mini-pos
