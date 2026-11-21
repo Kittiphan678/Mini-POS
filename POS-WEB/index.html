@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-POS | Modern POS System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&amp;family=Prompt:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow glow-1"></div>
+  <div class="bg-glow glow-2"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-icon">⚡</span>
+      <h1>MINI<span class="accent">POS</span><span class="dot">.</span></h1>
+    </div>
+    <div class="status-bar" id="cartStatus">
+      <span class="stat-item"><i>🛒</i> <strong id="statMenus">0</strong> เมนู</span>
+      <span class="stat-sep">|</span>
+      <span class="stat-item"><i>🥤</i> <strong id="statCups">0</strong> แก้ว</span>
+      <span class="stat-sep">|</span>
+      <span class="stat-item"><i>฿</i> <strong id="statPrice">0</strong></span>
+    </div>
+    <div class="clock" id="clock">00:00</div>
+  </header>
+
+  <div class="tab-nav">
+    <button class="tab active" data-tab="pos">🛍 หน้าขาย</button>
+    <button class="tab" data-tab="summary">📊 สรุปยอด</button>
+  </div>
+
+  <main class="layout">
+    <!-- POS TAB -->
+    <section class="tab-content active" id="tab-pos">
+      <div class="pos-grid">
+        <!-- เมนูสินค้า -->
+        <div class="panel glass">
+          <div class="panel-header">
+            <h2>📋 เมนูสินค้า</h2>
+            <span class="chip">กดเลือกเพื่อสั่งซื้อ</span>
+          </div>
+          <div class="products" id="productGrid"></div>
+        </div>
+
+        <!-- ตะกร้า + คิดเงิน -->
+        <div class="panel glass cart-panel">
+          <div class="panel-header">
+            <h2>🧾 ตะกร้า &amp; ชำระเงิน</h2>
+            <button class="btn-icon danger" id="cancelBtn" title="ยกเลิกรายการ">✕</button>
+          </div>
+          <p class="muted" id="cartInfo">ยังไม่มีสินค้าในตะกร้า</p>
+          <ul class="cart-list" id="cartList"></ul>
+          <div class="total-box">
+            <span>ยอดรวมสุทธิ</span>
+            <strong id="totalPrice">฿0</strong>
+          </div>
+          <div class="pay-section">
+            <label for="payInput">จำนวนเงินที่ชำระ</label>
+            <div class="pay-input-wrap">
+              <span class="currency">฿</span>
+              <input type="number" id="payInput" min="0" step="1" placeholder="0">
+            </div>
+            <div class="quick-pay">
+              <button data-pay="exact">พอดี</button>
+              <button data-pay="50">50</button>
+              <button data-pay="100">100</button>
+              <button data-pay="500">500</button>
+              <button data-pay="1000">1,000</button>
+            </div>
+          </div>
+          <button class="btn-glow" id="checkoutBtn">
+            <span>💰 ชำระเงิน</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUMMARY TAB -->
+    <section class="tab-content" id="tab-summary">
+      <div class="summary-grid">
+        <div class="panel glass">
+          <div class="panel-header"><h2>📊 ภาพรวมยอดขาย</h2></div>
+          <div class="cards">
+            <div class="card">
+              <div class="card-icon">📃</div>
+              <div class="card-info"><span>จำนวนบิล</span><strong id="sumOrders">0</strong></div>
+            </div>
+            <div class="card">
+              <div class="card-icon">🥤</div>
+              <div class="card-info"><span>แก้วที่ขาย</span><strong id="sumCups">0</strong></div>
+            </div>
+            <div class="card">
+              <div class="card-icon">💰</div>
+              <div class="card-info"><span>ยอดขายรวม</span><strong id="sumRevenue">฿0</strong></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel glass">
+          <div class="panel-header">
+            <h2>📦 สต็อกคงเหลือ</h2>
+            <button class="btn-sm" id="resetBtn">↺ รีเซ็ต</button>
+          </div>
+          <table>
+            <thead><tr><th>เมนู</th><th>ราคา</th><th>ขายแล้ว</th><th>คงเหลือ</th><th>สถานะ</th></tr></thead>
+            <tbody id="stockTable"></tbody>
+          </table>
+        </div>
+        <div class="panel glass full-width">
+          <div class="panel-header"><h2>📜 ประวัติการขาย</h2></div>
+          <ul class="history" id="historyList"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal สั่งซื้อ -->
+  <div class="modal-overlay" id="orderModal" hidden>
+    <div class="modal glass">
+      <div class="modal-icon" id="orderEmoji"></div>
+      <h3 id="orderTitle">สั่งซื้อ</h3>
+      <p class="muted" id="orderDetail"></p>
+      <div class="qty-selector">
+        <button class="qty-btn" id="qtyMinus">−</button>
+        <input type="number" id="qtyInput" value="1" min="1" step="1">
+        <button class="qty-btn" id="qtyPlus">+</button>
+      </div>
+      <div class="subtotal-line">
+        <span>ราคารวม</span>
+        <strong>฿<span id="orderSubtotal">0</span></strong>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-glow" id="orderConfirm">✓ เพิ่มเข้าตะกร้า</button>
+        <button class="btn-cancel" id="orderClose">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ใบเสร็จ -->
+  <div class="modal-overlay" id="receiptModal" hidden>
+    <div class="modal glass receipt-modal">
+      <div class="receipt-header">✅ การชำระเงินสำเร็จ</div>
+      <div id="receiptBody" class="receipt-body"></div>
+      <div class="modal-actions">
+        <button class="btn-glow" id="receiptClose">ตกลง</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="script.js"></script>
+</body>
+</html>
