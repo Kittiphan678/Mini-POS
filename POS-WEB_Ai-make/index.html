@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MINIPOS | ระบบขายหน้าร้านอัจฉริยะ & AI คิดวิเคราะห์</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for AI visual analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+    <div class="bg-glow glow-3"></div>
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+        <div class="brand">
+            <span class="logo-icon">⚡</span>
+            <div>
+                <h1>MINI<span class="accent">POS</span><span class="dot">.</span>AI</h1>
+                <span class="brand-sub">Smart Store Intelligence System</span>
+            </div>
+        </div>
+
+        <div class="status-bar" id="cartStatus">
+            <span class="stat-item"><i>🛒</i> <strong id="statMenus">0</strong> เมนู</span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item"><i>🥤</i> <strong id="statCups">0</strong> แก้ว</span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item"><i>฿</i> <strong id="statPrice">0</strong></span>
+        </div>
+
+        <div class="topbar-actions">
+            <button class="sound-toggle" id="soundToggle" title="เปิด/ปิดเสียงเอฟเฟกต์">🔊 เสียง: เปิด</button>
+            <div class="clock" id="clock">00:00:00</div>
+        </div>
+    </header>
+
+    <!-- TAB NAVIGATION -->
+    <nav class="tab-nav">
+        <button class="tab active" data-tab="pos">
+      <span class="tab-icon">🛍️</span> หน้าขาย POS
+    </button>
+        <button class="tab" data-tab="stock">
+      <span class="tab-icon">📦</span> จัดการสต็อก & เมนู
+    </button>
+        <button class="tab" data-tab="summary">
+      <span class="tab-icon">📊</span> สรุปยอดขาย & ประวัติ
+    </button>
+        <button class="tab tab-ai" data-tab="ai">
+      <span class="ai-badge">AI Brain</span>
+      <span class="tab-icon">🧠</span> ระบบคิดวิเคราะห์เอง
+    </button>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <main class="layout">
+
+        <!-- ==============================================
+         TAB 1: POS TERMINAL
+    =============================================== -->
+        <section class="tab-content active" id="tab-pos">
+            <div class="pos-grid">
+                <!-- เมนูสินค้า -->
+                <div class="panel glass product-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2>📋 เมนูเครื่องดื่ม & สินค้า</h2>
+                            <span class="chip">คลิกเพื่อสั่งซื้อ</span>
+                        </div>
+                        <!-- ช่องค้นหา & หมวดหมู่ -->
+                        <div class="search-wrap">
+                            <input type="text" id="searchInput" placeholder="🔍 ค้นหาเมนู..." autocomplete="off">
+                        </div>
+                    </div>
+
+                    <!-- หมวดหมู่ฟิลเตอร์ -->
+                    <div class="category-filters" id="categoryFilters">
+                        <button class="cat-pill active" data-cat="all">ทั้งหมด</button>
+                        <button class="cat-pill" data-cat="ชา">🧋 ชา</button>
+                        <button class="cat-pill" data-cat="กาแฟ">☕ กาแฟ</button>
+                        <button class="cat-pill" data-cat="นมสด">🥛 นมสด</button>
+                        <button class="cat-pill" data-cat="ขนม">🍰 เบเกอรี่</button>
+                    </div>
+
+                    <div class="products" id="productGrid"></div>
+                </div>
+
+                <!-- ตะกร้า & คิดเงิน -->
+                <div class="panel glass cart-panel">
+                    <div class="panel-header">
+                        <h2>🧾 ตะกร้าสินค้า</h2>
+                        <div class="cart-header-actions">
+                            <button class="btn-icon danger" id="cancelBtn" title="เคลียร์ตะกร้า">🗑️</button>
+                        </div>
+                    </div>
+
+                    <p class="muted" id="cartInfo">ยังไม่มีสินค้าในตะกร้า</p>
+                    <ul class="cart-list" id="cartList"></ul>
+
+                    <!-- ส่วนลด / สมาชิก -->
+                    <div class="promo-box">
+                        <div class="promo-input-row">
+                            <input type="text" id="discountCode" placeholder="โค้ดส่วนลด (เช่น SALE10)" uppercase>
+                            <button class="btn-sm" id="applyDiscountBtn">ใช้โค้ด</button>
+                        </div>
+                        <div id="appliedDiscountTag" class="discount-tag" hidden>
+                            <span id="discountLabel">ส่วนลด 10%</span>
+                            <button id="removeDiscountBtn">×</button>
+                        </div>
+                    </div>
+
+                    <!-- ยอดรวม -->
+                    <div class="bill-breakdown">
+                        <div class="bill-row">
+                            <span>ราคารวมสินค้า</span>
+                            <span id="subtotalPrice">฿0</span>
+                        </div>
+                        <div class="bill-row discount-row" id="discountRow" hidden>
+                            <span>ส่วนลด</span>
+                            <span id="discountAmount">-฿0</span>
+                        </div>
+                        <div class="total-box">
+                            <span>ยอดชำระสุทธิ</span>
+                            <strong id="totalPrice">฿0</strong>
+                        </div>
+                    </div>
+
+                    <!-- วิธีการชำระเงิน -->
+                    <div class="pay-method-tabs">
+                        <button class="pay-tab active" data-method="cash">💵 เงินสด</button>
+                        <button class="pay-tab" data-method="qr">📱 สแกน QR</button>
+                        <button class="pay-tab" data-method="transfer">💳 บัตร/โอน</button>
+                    </div>
+
+                    <!-- แบบชำระเงินสด -->
+                    <div class="pay-section" id="cashPaySection">
+                        <label for="payInput">จำนวนเงินที่รับจากลูกค้า</label>
+                        <div class="pay-input-wrap">
+                            <span class="currency">฿</span>
+                            <input type="number" id="payInput" min="0" step="1" placeholder="0">
+                        </div>
+                        <div class="quick-pay">
+                            <button data-pay="exact">พอดี</button>
+                            <button data-pay="50">50</button>
+                            <button data-pay="100">100</button>
+                            <button data-pay="500">500</button>
+                            <button data-pay="1000">1,000</button>
+                        </div>
+                    </div>
+
+                    <!-- แบบสแกน QR -->
+                    <div class="pay-section" id="qrPaySection" hidden>
+                        <div class="qr-notice">
+                            <p>ระบบพร้อมสร้าง <strong>PromptPay QR</strong> ตามยอดเงินอัตโนมัติ</p>
+                            <small class="muted">กดปุ่มชำระเงินเพื่อเปิดหน้าต่างสแกน QR</small>
+                        </div>
+                    </div>
+
+                    <!-- แบบบัตร/โอน -->
+                    <div class="pay-section" id="transferPaySection" hidden>
+                        <div class="qr-notice">
+                            <p>💳 ชำระด้วย <strong>บัตรเครดิต/เดบิต หรือ เงินโอน</strong></p>
+                            <small class="muted">ตรวจสอบสลิปการโอนแล้วกดปุ่มยืนยัน</small>
+                        </div>
+                    </div>
+
+                    <button class="btn-glow" id="checkoutBtn">
+            <span>💰 ชำระเงิน</span>
+          </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==============================================
+         TAB 2: STOCK & PRODUCT MANAGEMENT
+    =============================================== -->
+        <section class="tab-content" id="tab-stock">
+            <div class="stock-management-grid">
+                <!-- ตารางจัดการสินค้า -->
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <div>
+                            <h2>📦 คลังสินค้า & รายการเมนู</h2>
+                            <span class="muted">ปรับสต็อก เพิ่มเมนูใหม่ หรือแก้ไขต้นทุน/ราคาขาย</span>
+                        </div>
+                        <div class="header-btns">
+                            <button class="btn-sm btn-primary" id="openAddProductModal">+ เพิ่มเมนูใหม่</button>
+                            <button class="btn-sm" id="resetBtn">↺ รีเซ็ตค่าเริ่มต้น</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="modern-table">
+                            <thead>
+                                <tr>
+                                    <th>เมนู</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>ราคาขาย</th>
+                                    <th>ต้นทุน</th>
+                                    <th>กำไร/แก้ว</th>
+                                    <th>ขายแล้ว</th>
+                                    <th>สต็อกคงเหลือ</th>
+                                    <th>ปรับสต็อกด่วน</th>
+                                    <th>สถานะ</th>
+                                    <th>จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==============================================
+         TAB 3: SALES SUMMARY & HISTORY
+    =============================================== -->
+        <section class="tab-content" id="tab-summary">
+            <div class="summary-grid">
+                <!-- การ์ดสรุป KPI -->
+                <div class="panel glass full-width">
+                    <div class="panel-header">
+                        <h2>📊 ภาพรวมยอดขายธุรกิจ</h2>
+                        <div class="header-btns">
+                            <button class="btn-sm" id="demoDataBtn">⚡ จำลองข้อมูลทดสอบ (30 บิล)</button>
+                            <button class="btn-sm" id="exportCsvBtn">📥 ส่งออก CSV</button>
+                        </div>
+                    </div>
+                    <div class="cards">
+                        <div class="card">
+                            <div class="card-icon">📃</div>
+                            <div class="card-info">
+                                <span>จำนวนบิลทั้งหมด</span>
+                                <strong id="sumOrders">0</strong>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon">🥤</div>
+                            <div class="card-info">
+                                <span>จำนวนแก้วที่ขายได้</span>
+                                <strong id="sumCups">0</strong>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon">💰</div>
+                            <div class="card-info">
+                                <span>ยอดขายรวมสุทธิ</span>
+                                <strong id="sumRevenue">฿0</strong>
+                            </div>
+                        </div>
+                        <div class="card card-profit">
+                            <div class="card-icon">📈</div>
+                            <div class="card-info">
+                                <span>กำไรขั้นต้นสุทธิ</span>
+                                <strong id="sumProfit">฿0</strong>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon">🏷️</div>
+                            <div class="card-info">
+                                <span>ยอดซื้อเฉลี่ย / บิล (AOV)</span>
+                                <strong id="sumAOV">฿0</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- รายการประวัติบิล -->
+                <div class="panel glass full-width">
+                    <div class="panel-header">
+                        <h2>📜 ประวัติการขายและบิลล่าสุด</h2>
+                        <div class="search-wrap-sm">
+                            <input type="text" id="searchHistoryInput" placeholder="🔍 ค้นหาเลขบิล หรือ เมนู...">
+                        </div>
+                    </div>
+                    <div class="history-table-wrap">
+                        <table class="modern-table">
+                            <thead>
+                                <tr>
+                                    <th>เลขที่บิล</th>
+                                    <th>วัน-เวลา</th>
+                                    <th>รายการสินค้า</th>
+                                    <th>วิธีชำระ</th>
+                                    <th>ยอดเงิน</th>
+                                    <th>รับ/ทอน</th>
+                                    <th>จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==============================================
+         TAB 4: AI BRAIN & AUTONOMOUS ANALYTICS
+    =============================================== -->
+        <section class="tab-content" id="tab-ai">
+            <div class="ai-grid">
+
+                <!-- แถบบน: AI Health Score & Executive Insights -->
+                <div class="panel glass full-width ai-hero-panel">
+                    <div class="ai-hero-header">
+                        <div class="ai-badge-large">
+                            <span class="pulsing-dot"></span> ระบบคิดวิเคราะห์อัตโนมัติ (Autonomous AI Brain)
+                        </div>
+                        <div class="ai-refresh-time" id="aiLastUpdated">คำนวณล่าสุด: เรียลไทม์</div>
+                    </div>
+
+                    <div class="ai-hero-body">
+                        <!-- คะแนนสุขภาพธุรกิจ -->
+                        <div class="health-card">
+                            <div class="health-score-circle">
+                                <svg viewBox="0 0 100 100" class="score-svg">
+                  <circle class="score-bg" cx="50" cy="50" r="42"></circle>
+                  <circle class="score-bar" id="scoreCircle" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="60"></circle>
+                </svg>
+                                <div class="score-text">
+                                    <span id="healthScoreNum">85</span>
+                                    <small>/100</small>
+                                </div>
+                            </div>
+                            <div class="health-desc">
+                                <h3 id="healthGrade">ระดับ: ดีเยี่ยม (A)</h3>
+                                <p id="healthSummary">สถานะการเงิน สต็อก และความต้องการของลูกค้าอยู่ในเกณฑ์สมดุลดีมาก</p>
+                            </div>
+                        </div>
+
+                        <!-- ข้อความวิเคราะห์ด่วนจาก AI -->
+                        <div class="ai-bullets">
+                            <h4>🧠 สิ่งที่ AI ค้นพบและประเมินให้คุณแบบอัตโนมัติ:</h4>
+                            <ul id="aiInsightsList">
+                                <li class="bullet-item info">กำลังประมวลผลข้อมูลการขาย...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- กล่อง 1: พยากรณ์เวลาสินค้าจะหมดสต็อก (Stockout Run-Out Predictor) -->
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <h2>⏳ พยากรณ์สต็อกหมด & อัตราการขาย</h2>
+                        <span class="chip chip-ai">Run-Out Prediction</span>
+                    </div>
+                    <div class="prediction-list" id="stockPredictionList">
+                        <!-- dynamic via script -->
+                    </div>
+                </div>
+
+                <!-- กล่อง 2: ระบบแนะนำสั่งซื้อ & เติมของอัจฉริยะ (Smart Reorder Assistant) -->
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <h2>📦 คำแนะนำเติมสต็อกอัจฉริยะ</h2>
+                        <button class="btn-sm btn-accent" id="autoRestockBtn">⚡ เติมตามที่ AI แนะนำ</button>
+                    </div>
+                    <div class="reorder-wrap" id="reorderContent">
+                        <!-- dynamic via script -->
+                    </div>
+                </div>
+
+                <!-- กล่อง 3: BCG Matrix / Menu Matrix การจัดกลุ่มเมนู -->
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <h2>🎯 เมนูเมทริกซ์ (Menu BCG Matrix)</h2>
+                        <span class="chip">วิเคราะห์ดาวเด่น vs สินค้าชะลอ</span>
+                    </div>
+                    <div class="bcg-grid">
+                        <div class="bcg-box star">
+                            <div class="bcg-title">⭐ Stars (ดาวเด่น)</div>
+                            <small>ขายดีมาก + กำไรสูง</small>
+                            <div class="bcg-items" id="bcgStars">-</div>
+                        </div>
+                        <div class="bcg-box cash-cow">
+                            <div class="bcg-title">🐮 Cash Cows (ทำเงินหลัก)</div>
+                            <small>ขายได้เรื่อยๆ สม่ำเสมอ</small>
+                            <div class="bcg-items" id="bcgCows">-</div>
+                        </div>
+                        <div class="bcg-box question">
+                            <div class="bcg-title">❓ Question Marks (ดาวรุ่ง)</div>
+                            <small>กำไรสูงแต่ยอดขายน้อย</small>
+                            <div class="bcg-items" id="bcgQuestions">-</div>
+                        </div>
+                        <div class="bcg-box dog">
+                            <div class="bcg-title">🐶 Dogs (ต้องปรับปรุง)</div>
+                            <small>ยอดขายน้อย + กำไรต่ำ</small>
+                            <div class="bcg-items" id="bcgDogs">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- กล่อง 4: Market Basket Analysis & AI Combo Generator -->
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <h2>💡 จับคู่โปรโมชั่นอัจฉริยะ (Basket Analysis)</h2>
+                        <span class="chip">Upsell & Bundling</span>
+                    </div>
+                    <p class="muted">AI ตรวจสอบความถี่ที่สินค้าถูกซื้อพร้อมกันในบิลเดียว แล้วออกแบบโปรโมชั่นเพิ่มยอดขาย:</p>
+                    <div class="combo-suggestions" id="comboSuggestions">
+                        <!-- dynamic via script -->
+                    </div>
+                </div>
+
+                <!-- กราฟ Chart.js วิเคราะห์แบบ Interactive -->
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <h2>📈 กราฟแนวโน้มยอดขาย & ช่วงเวลาขายดี (Hourly Trend)</h2>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="salesTrendChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="panel glass">
+                    <div class="panel-header">
+                        <h2>📊 สัดส่วนยอดขาย & สัดส่วนกำไรตามเมนู</h2>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="categoryProfitChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- กล่อง 5: ผู้ช่วย AI ถาม-ตอบและคิดวิเคราะห์สำหรับเจ้าของร้าน (AI Consultant Chat) -->
+                <div class="panel glass full-width ai-chat-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2>🤖 ที่ปรึกษา AI ประจำร้าน (Ask Store AI)</h2>
+                            <span class="muted">ถามคำถามเชิงธุรกิจ ระบบจะวิเคราะห์จากข้อมูลขายจริงและให้คำตอบทันที</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Prompts -->
+                    <div class="quick-ai-prompts">
+                        <button class="ai-prompt-btn" data-q="เมนูไหนทำกำไรสูงสุดในร้าน?">💰 เมนูไหนทำกำไรสูงสุด?</button>
+                        <button class="ai-prompt-btn" data-q="ควรเติมสต็อกอะไรด่วนที่สุดตอนนี้?">🚨 สินค้าอะไรต้องเติมด่วน?</button>
+                        <button class="ai-prompt-btn" data-q="ช่วยแนะนำโปรโมชั่นกระตุ้นยอดขายช่วงบ่ายหน่อย">🎯 แนะนำโปรโมชั่นกระตุ้นยอด</button>
+                        <button class="ai-prompt-btn" data-q="ประเมินความเสี่ยงและจุดที่ต้องปรับปรุงของร้าน">⚠️ ประเมินจุดอ่อนและจุดเสี่ยง</button>
+                        <button class="ai-prompt-btn" data-q="วิเคราะห์แนวโน้มยอดขายวันนี้">📈 วิเคราะห์แนวโน้มยอดขาย</button>
+                    </div>
+
+                    <!-- Chat log -->
+                    <div class="ai-chat-log" id="aiChatLog">
+                        <div class="chat-msg ai">
+                            <div class="msg-avatar">🤖</div>
+                            <div class="msg-bubble">
+                                สวัสดีครับเจ้าของร้าน! ผมคือสมองกลวิเคราะห์ประจำร้าน MINIPOS ผมติดตามดูยอดขาย สต็อกสินค้า และพฤติกรรมลูกค้าอยู่ตลอดเวลา คุณสามารถกดหัวข้อคำถามด้านบน หรือพิมพ์สอบถามผมได้โดยตรงเลยครับ!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat input -->
+                    <div class="ai-chat-input-row">
+                        <input type="text" id="aiChatInput" placeholder="💬 พิมพ์ถาม AI เช่น 'ควรปรับราคาสินค้าตัวไหน?' หรือ 'วันนี้ขายดีไหม'..." autocomplete="off">
+                        <button class="btn-glow btn-send-ai" id="aiChatSendBtn">ถาม AI วิเคราะห์</button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==============================================
+       MODALS
+  =============================================== -->
+
+    <!-- Modal สั่งซื้อเมนู -->
+    <div class="modal-overlay" id="orderModal" hidden>
+        <div class="modal glass">
+            <div class="modal-icon" id="orderEmoji">🧋</div>
+            <h3 id="orderTitle">สั่งซื้อ</h3>
+            <p class="muted" id="orderDetail"></p>
+
+            <div class="option-group">
+                <label>ระดับความหวาน:</label>
+                <div class="sweet-selector" id="sweetSelector">
+                    <button class="sweet-btn" data-sweet="100%">100%</button>
+                    <button class="sweet-btn active" data-sweet="50%">50%</button>
+                    <button class="sweet-btn" data-sweet="25%">25%</button>
+                    <button class="sweet-btn" data-sweet="0%">0%</button>
+                </div>
+            </div>
+
+            <div class="qty-selector">
+                <button class="qty-btn" id="qtyMinus">−</button>
+                <input type="number" id="qtyInput" value="1" min="1" step="1">
+                <button class="qty-btn" id="qtyPlus">+</button>
+            </div>
+
+            <div class="subtotal-line">
+                <span>ราคารวม</span>
+                <strong>฿<span id="orderSubtotal">0</span></strong>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-glow" id="orderConfirm">✓ เพิ่มเข้าตะกร้า</button>
+                <button class="btn-cancel" id="orderClose">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal ใบเสร็จ -->
+    <div class="modal-overlay" id="receiptModal" hidden>
+        <div class="modal glass receipt-modal">
+            <div class="receipt-header">
+                <div class="check-icon">✓</div>
+                <h3>การชำระเงินสำเร็จ</h3>
+                <p class="muted">บันทึกข้อมูลและอัปเดตสต็อกเรียบร้อย</p>
+            </div>
+            <div id="receiptBody" class="receipt-body"></div>
+            <div class="modal-actions-horizontal">
+                <button class="btn-sm" id="printReceiptBtn">🖨️ พิมพ์ใบเสร็จ</button>
+                <button class="btn-glow" id="receiptClose">ตกลง (เสร็จสิ้น)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal สแกน QR PromptPay -->
+    <div class="modal-overlay" id="qrModal" hidden>
+        <div class="modal glass qr-modal-box">
+            <div class="qr-header">
+                <span class="promptpay-logo">PromptPay พร้อมเพย์</span>
+                <h3>สแกน QR Code เพื่อชำระเงิน</h3>
+            </div>
+            <div class="qr-code-frame" id="qrCodeContainer">
+                <!-- SVG Generated QR -->
+            </div>
+            <div class="qr-amount-box">
+                <span>ยอดชำระ:</span>
+                <strong id="qrAmountDisplay">฿0</strong>
+            </div>
+            <p class="muted">รองรับทุกธนาคารและ Mobile Banking ในไทย</p>
+            <div class="modal-actions-horizontal">
+                <button class="btn-glow" id="simulateQrPaidBtn">✓ จำลองลูกค้าสแกนจ่ายสำเร็จ</button>
+                <button class="btn-cancel" id="qrCloseBtn">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal เพิ่ม/แก้ไขสินค้า -->
+    <div class="modal-overlay" id="productModal" hidden>
+        <div class="modal glass product-form-modal">
+            <h3 id="productModalTitle">เพิ่มสินค้าใหม่</h3>
+            <form id="productForm" onsubmit="return false;">
+                <input type="hidden" id="editProductKey" value="">
+                <div class="form-group">
+                    <label for="prodName">ชื่อสินค้า / เมนู:</label>
+                    <input type="text" id="prodName" required placeholder="เช่น ชาเขียวมะนาว">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="prodCategory">หมวดหมู่:</label>
+                        <select id="prodCategory">
+              <option value="ชา">ชา</option>
+              <option value="กาแฟ">กาแฟ</option>
+              <option value="นมสด">นมสด</option>
+              <option value="ขนม">เบเกอรี่/ขนม</option>
+              <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="prodEmoji">ไอคอน Emoji:</label>
+                        <input type="text" id="prodEmoji" value="🥤" maxlength="4">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="prodPrice">ราคาขาย (฿):</label>
+                        <input type="number" id="prodPrice" min="1" step="1" required placeholder="45">
+                    </div>
+                    <div class="form-group">
+                        <label for="prodCost">ต้นทุน (฿):</label>
+                        <input type="number" id="prodCost" min="0" step="1" required placeholder="18">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="prodStock">จำนวนสต็อกเริ่มต้น:</label>
+                    <input type="number" id="prodStock" min="0" step="1" required placeholder="20">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-glow" id="saveProductBtn">บันทึกข้อมูลสินค้า</button>
+                    <button type="button" class="btn-cancel" id="closeProductModalBtn">ยกเลิก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast" hidden></div>
+
+    <!-- Main JavaScript Logic -->
+    <script src="script.js"></script>
+</body>
+
+</html>
