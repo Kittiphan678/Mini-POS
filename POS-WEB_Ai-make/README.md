@@ -64,38 +64,57 @@
 
 ## 🚀 วิธีการเปิดใช้งาน
 
-### 1. เปิดผ่านเว็บเบราว์เซอร์โดยตรง (แนะนำ)
-เพียงเปิดไฟล์ `index.html` ใน Google Chrome, Microsoft Edge, Firefox หรือ Safari:
-- ดับเบิลคลิกที่ไฟล์: `d:\VSCODE\PY PROJECT\POS-WEB\index.html`
+### 1. วิธีที่ 1: ดับเบิลคลิกไฟล์ `start_server.bat` (แนะนำและสะดวกที่สุด 🌟)
+- ดับเบิลคลิกที่ไฟล์ **`start_server.bat`**
+- ระบบจะเริ่มเปิด Backend Server (พร้อมฐานข้อมูล SQLite) และเปิดหน้าเว็บ `http://localhost:8000` ให้ในเบราว์เซอร์ของคุณโดยอัตโนมัติทันที!
 
-### 2. รันผ่าน Local Web Server (ทางเลือก)
-เปิด PowerShell หรือ Command Prompt ที่โฟลเดอร์โปรเจกต์:
+### 2. วิธีที่ 2: รันผ่าน Terminal / PowerShell
+เปิด Terminal ในโฟลเดอร์โปรเจกต์:
 ```powershell
-cd "d:\VSCODE\PY PROJECT\POS-WEB"
-python -m http.server 8080
+cd "d:\VSCODE\PY PROJECT\POS-WEB_Ai-make"
+python server.py
 ```
-จากนั้นเปิดเบราว์เซอร์ไปที่: `http://localhost:8080`
+> หรือหากใช้ Python ใน AppData:
+> ```powershell
+> & "$env:LOCALAPPDATA\Python\bin\python.exe" server.py
+> ```
+จากนั้นเปิดเบราว์เซอร์ไปที่: **`http://localhost:8000`**
 
-### 3. รันโปรแกรมเวอร์ชันคอนโซล (CLI)
-หากต้องการใช้งานเวอร์ชัน Python ใน Terminal:
-```powershell
-python "d:\VSCODE\PY PROJECT\POS-WEB\Mini-POS.py"
-```
-มีเมนูให้เลือก:
-1. สั่งซื้อ
-2. คิดเงิน
-3. ยกเลิกตะกร้า
-4. 🧠 AI วิเคราะห์ธุรกิจอัตโนมัติ
-5. ออกจากโปรแกรม
+### 3. วิธีที่ 3: เปิดไฟล์ `index.html` แบบออฟไลน์ (Standalone)
+- ดับเบิลคลิกที่ `index.html` เพื่อใช้งานแบบ Standalone ได้เช่นกัน (ระบบจะใช้ LocalStorage สำรองให้อัตโนมัติ)
+
+---
+
+## 🔌 ระบบ Backend & REST API (SQLite Database)
+ระบบ Backend ถูกพัฒนาด้วย **Python Standard Library 100%** (ไม่ต้องติดตั้ง `pip` หรือแพ็กเกจภายนอก)
+
+| Endpoint | Method | คำอธิบายการทำงาน |
+|---|---|---|
+| `/api/status` | `GET` | ตรวจสอบสถานะการเชื่อมต่อเซิร์ฟเวอร์ และสถิติข้อมูล |
+| `/api/products` | `GET` | ดึงรายการสินค้า สต็อกคงเหลือ และยอดขายสะสม |
+| `/api/products` | `POST` | เพิ่มสินค้าใหม่ หรือแก้ไขข้อมูลสินค้าลง SQLite |
+| `/api/products/delete` | `POST` / `DELETE` | ลบสินค้าออกจากฐานข้อมูล |
+| `/api/products/adjust-stock` | `POST` | ปรับสต็อกสินค้าด่วน (+5, +10, -1 หรือกำหนดจำนวน) |
+| `/api/checkout` | `POST` | **ชำระเงินและตัดสต็อกสินค้าแบบ ACID Transaction** (ป้องกันสต็อกติดลบ) |
+| `/api/orders` | `GET` | ดึงประวัติบิลการขายพร้อมรายการสินค้าในแต่ละบิล |
+| `/api/summary` | `GET` | รายงานสรุปผลภาพรวม (ยอดขาย, กำไร, สินค้าขายดี, สต็อกใกล้หมด) |
+| `/api/demo-data` | `POST` | จำลองข้อมูลยอดขาย 30 บิล บันทึกลงฐานข้อมูลและตัดสต็อกสมจริง |
+| `/api/reset` | `POST` | รีเซ็ตฐานข้อมูลกลับเป็นค่าเริ่มต้น |
 
 ---
 
 ## 📁 โครงสร้างไฟล์
 ```
-POS-WEB/
-├── index.html        # โครงสร้างหน้าเว็บ โมเดิร์น Responsive พร้อม 4 แท็บหลัก
-├── style.css         # ธีม Cyberpunk Glassmorphism Dark UI พร้อม Print Stylesheet
-├── script.js         # ลอจิก POS, LocalStorage, Chart.js, และระบบสมองกล AI คิดวิเคราะห์
-├── Mini-POS.py       # โปรแกรม Python CLI ฉบับอัปเกรดระบบ AI วิเคราะห์
-└── README.md         # คู่มือการใช้งานระบบ
+POS-WEB_Ai-make/
+├── index.html                  # หน้าเว็บ POS UI รองรับ 4 แท็บหลัก และไฟแสดงสถานะเซิร์ฟเวอร์
+├── style.css                   # สไตล์ Dark Glassmorphism, Print Receipt, Badges
+├── script.js                   # ลอจิกเชื่อมต่อ REST API, ตะกร้าสินค้า, AI Brain, Chart.js
+├── server.py                   # Backend Server (ThreadingHTTPServer + REST API Router)
+├── database.py                 # SQLite Database Layer (จัดการตาราง สินค้า สต็อก บิล สรุปผล)
+├── pos_database.db             # ไฟล์ฐานข้อมูล SQLite (จัดเก็บข้อมูลจริงอย่างถาวร)
+├── test_backend.py             # ชุดทดสอบระบบ Backend & Database (Unit Tests ครบ 7 การทดสอบ)
+├── start_server.bat            # สคริปต์คลิกเดียวรันทั้ง Backend และเปิดหน้าเว็บอัตโนมัติ
+├── start_server.ps1            # สคริปต์รันบน PowerShell
+├── Mini-POS_original_logic.py  # โค้ดต้นฉบับฉบับ Terminal CLI
+└── README.md                   # คู่มือและเอกสารประกอบการใช้งานระบบ
 ```

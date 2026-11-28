@@ -83,9 +83,47 @@ const Sound = {
 };
 
 /* ==========================================================================
-   LOCALSTORAGE & PERSISTENCE
+   BACKEND API & PERSISTENCE ENGINE
    ========================================================================== */
-function loadState() {
+const API_BASE = (window.location.origin && window.location.origin.startsWith("http")) 
+  ? window.location.origin 
+  : "http://localhost:8000";
+
+let isBackendOnline = false;
+
+function updateServerBadge(online, info) {
+  const el = $("serverStatus");
+  const text = $("serverStatusText");
+  if (!el || !text) return;
+  if (online) {
+    el.className = "server-status online";
+    text.textContent = "🟢 SQLite ฐานข้อมูลออนไลน์";
+    el.title = `เชื่อมต่อสำเร็จ: ${info?.database || 'SQLite'} (สินค้า ${info?.total_products || 0} ชิ้น, ยอดขาย ${info?.total_orders || 0} บิล)`;
+  } else {
+    el.className = "server-status offline";
+    text.textContent = "🟡 ออฟไลน์ (LocalStorage)";
+    el.title = "เซิร์ฟเวอร์ไม่ได้เปิดอยู่ ระบบจะบันทึกข้อมูลในบราวเซอร์ (รัน python server.py เพื่อเปิดฐานข้อมูล)";
+  }
+}
+
+async function checkBackendStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/status`, { method: "GET" });
+    if (res.ok) {
+      const data = await res.json();
+      isBackendOnline = true;
+      updateServerBadge(true, data);
+      return data;
+    }
+  } catch (err) {
+    // Offline or standalone file
+  }
+  isBackendOnline = false;
+  updateServerBadge(false);
+  return null;
+}
+
+function loadLocalBackup() {
   try {
     const savedProd = localStorage.getItem("minipos_products");
     const savedHist = localStorage.getItem("minipos_history");
@@ -97,7 +135,6 @@ function loadState() {
     sold = savedSold ? JSON.parse(savedSold) : {};
     if (savedSound !== null) soundEnabled = savedSound === "true";
 
-    // Recalculate sold from history if sold is empty
     if (historyBills.length > 0 && Object.keys(sold).length === 0) {
       historyBills.forEach(b => {
         b.items.forEach(it => {
@@ -111,6 +148,39 @@ function loadState() {
     historyBills = [];
     sold = {};
   }
+}
+
+async function loadState() {
+  // ตรวจสอบการเชื่อมต่อ Backend ก่อน
+  const status = await checkBackendStatus();
+  if (status) {
+    try {
+      const [prodRes, orderRes, sumRes] = await Promise.all([
+        fetch(`${API_BASE}/api/products`).then(r => r.json()),
+        fetch(`${API_BASE}/api/orders`).then(r => r.json()),
+        fetch(`${API_BASE}/api/summary`).then(r => r.json())
+      ]);
+
+      if (prodRes.ok && prodRes.products && Object.keys(prodRes.products).length > 0) {
+        products = prodRes.products;
+      }
+      if (orderRes.ok && Array.isArray(orderRes.orders)) {
+        historyBills = orderRes.orders;
+      }
+      if (sumRes.ok && sumRes.summary) {
+        sold = sumRes.summary.sold || {};
+      }
+      saveState();
+      refresh();
+      return;
+    } catch (err) {
+      console.warn("Error fetching data from API, using local backup:", err);
+    }
+  }
+
+  // หากติดต่อ Backend ไม่ได้ ให้ใช้ข้อมูลจาก LocalStorage
+  loadLocalBackup();
+  refresh();
 }
 
 function saveState() {
@@ -333,24 +403,82 @@ document.querySelectorAll(".pay-tab").forEach(tab => {
   });
 });
 
-function completeOrder(payAmount, paymentMethod) {
+async function completeOrder(payAmount, paymentMethod) {
   const total = getCartTotal();
   const subtotal = getCartSubtotal();
   const discountAmt = getDiscountAmount(subtotal);
 
+  const orderItems = Object.values(cart).map(i => ({
+    name: i.name,
+    sweet: i.sweet,
+    amount: i.qty,
+    price: i.price,
+    cost: i.cost,
+    total: i.qty * i.price
+  }));
+
+  const orderPayload = {
+    items: orderItems,
+    subtotal: subtotal,
+    discount: discountAmt,
+    total: total,
+    pay: payAmount,
+    change: Math.max(0, payAmount - total),
+    method: paymentMethod || "เงินสด"
+  };
+
+  // หาก Backend ออนไลน์ ให้บันทึกและตัดสต็อกผ่าน Backend (ACID Transaction ใน SQLite)
+  if (isBackendOnline) {
+    try {
+      const resp = await fetch(`${API_BASE}/api/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderPayload)
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        toast(data.error || "เกิดข้อผิดพลาดในการตัดสต็อกหรือบันทึกบิล", "error");
+        Sound.warn();
+        return;
+      }
+
+      // นำข้อมูลสินค้าที่ถูกตัดสต็อกจริงจาก SQLite มาอัปเดต state
+      products = data.products;
+      historyBills.unshift(data.order);
+      if (data.summary && data.summary.sold) {
+        sold = data.summary.sold;
+      } else {
+        orderItems.forEach(i => {
+          sold[i.name] = (sold[i.name] || 0) + i.amount;
+        });
+      }
+
+      cart = {};
+      appliedDiscount = null;
+      $("discountCode").value = "";
+      $("appliedDiscountTag").hidden = true;
+      $("discountRow").hidden = true;
+      $("payInput").value = "";
+
+      saveState();
+      Sound.success();
+      showReceipt(data.order);
+      refresh();
+      toast("✓ ชำระเงินสำเร็จ ตัดสต็อกและบันทึกลง SQLite เรียบร้อย!", "ok");
+      return;
+    } catch (err) {
+      console.warn("Backend checkout error, falling back to local:", err);
+      toast("ติดต่อเซิร์ฟเวอร์ไม่ได้ กำลังบันทึกแบบออฟไลน์", "warn");
+    }
+  }
+
+  // ออฟไลน์ Fallback (LocalStorage)
   const order = {
     no: historyBills.length + 1,
     time: new Date().toLocaleString("th-TH"),
     timestamp: Date.now(),
     hour: new Date().getHours(),
-    items: Object.values(cart).map(i => ({
-      name: i.name,
-      sweet: i.sweet,
-      amount: i.qty,
-      price: i.price,
-      cost: i.cost,
-      total: i.qty * i.price
-    })),
+    items: orderItems,
     subtotal: subtotal,
     discount: discountAmt,
     total: total,
@@ -365,7 +493,7 @@ function completeOrder(payAmount, paymentMethod) {
     sold[i.name] = (sold[i.name] || 0) + i.amount;
   });
 
-  historyBills.push(order);
+  historyBills.unshift(order);
   cart = {};
   appliedDiscount = null;
   $("discountCode").value = "";
@@ -375,10 +503,9 @@ function completeOrder(payAmount, paymentMethod) {
 
   saveState();
   Sound.success();
-
-  // Show receipt modal
   showReceipt(order);
   refresh();
+  toast("✓ ชำระเงินสำเร็จ (บันทึกใน LocalStorage)", "ok");
 }
 
 function checkout() {
@@ -758,7 +885,7 @@ function renderInventory() {
     const tr = document.createElement("tr");
     const profit = p.price - (p.cost || 0);
     const margin = p.price > 0 ? Math.round((profit / p.price) * 100) : 0;
-    const soldCount = sold[name] || 0;
+    const soldCount = sold[name] || p.sold || 0;
     const statusClass = p.stock === 0 ? "out" : p.stock <= 3 ? "low" : "ok";
     const statusLabel = p.stock === 0 ? "สินค้าหมด" : p.stock <= 3 ? "ใกล้หมด" : "พร้อมขาย";
 
@@ -778,8 +905,9 @@ function renderInventory() {
         </div>
       </td>
       <td><span class="badge ${statusClass}">${statusLabel}</span></td>
-      <td>
-        <button class="btn-sm edit-btn" style="padding: 3px 8px;">✏️ แก้ไข</button>
+      <td style="white-space: nowrap;">
+        <button class="btn-sm edit-btn" style="padding: 3px 8px; margin-right: 4px;">✏️ แก้ไข</button>
+        <button class="btn-sm delete-btn" style="padding: 3px 8px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444;" title="ลบสินค้านี้">🗑️ ลบ</button>
       </td>
     `;
 
@@ -787,19 +915,82 @@ function renderInventory() {
     tr.querySelector(".add10").addEventListener("click", () => adjustStock(name, 10));
     tr.querySelector(".sub1").addEventListener("click", () => adjustStock(name, -1));
     tr.querySelector(".edit-btn").addEventListener("click", () => openEditProductModal(name));
+    tr.querySelector(".delete-btn").addEventListener("click", () => deleteProduct(name));
 
     tbody.appendChild(tr);
   });
 }
 
-function adjustStock(name, delta) {
+async function adjustStock(name, delta) {
   if (!products[name]) return;
+
+  if (isBackendOnline) {
+    try {
+      const resp = await fetch(`${API_BASE}/api/products/adjust-stock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, delta })
+      });
+      const data = await resp.json();
+      if (data.ok && data.products) {
+        products = data.products;
+        Sound.add();
+        renderInventory();
+        renderProducts();
+        toast(`ปรับสต็อก "${name}" เป็น ${products[name].stock} ชิ้น (บันทึกลง SQLite)`, "ok");
+        saveState();
+        return;
+      }
+    } catch (err) {
+      console.warn("API adjust stock error:", err);
+    }
+  }
+
+  // Fallback Local
   products[name].stock = Math.max(0, products[name].stock + delta);
   saveState();
   Sound.add();
   renderInventory();
   renderProducts();
   toast(`ปรับสต็อก "${name}" เป็น ${products[name].stock} ชิ้น เรียบร้อย`, "ok");
+}
+
+async function deleteProduct(name) {
+  if (!confirm(`ยืนยันการลบสินค้า "${name}" ออกจากระบบและฐานข้อมูลหรือไม่?`)) return;
+
+  if (isBackendOnline) {
+    try {
+      const resp = await fetch(`${API_BASE}/api/products/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name })
+      });
+      const data = await resp.json();
+      if (data.ok && data.products) {
+        products = data.products;
+        delete cart[name];
+        Sound.delete();
+        refresh();
+        toast(`ลบสินค้า "${name}" ออกจากฐานข้อมูล SQLite เรียบร้อย`, "ok");
+        saveState();
+        return;
+      } else {
+        toast(data.error || "ไม่สามารถลบสินค้าได้", "error");
+        Sound.warn();
+        return;
+      }
+    } catch (err) {
+      console.warn("API delete error:", err);
+    }
+  }
+
+  // Fallback Local
+  delete products[name];
+  delete cart[name];
+  saveState();
+  Sound.delete();
+  refresh();
+  toast(`ลบสินค้า "${name}" เรียบร้อย`, "ok");
 }
 
 /* Modal Add/Edit Product */
@@ -835,7 +1026,7 @@ function openEditProductModal(name) {
 $("openAddProductModal").addEventListener("click", openAddProductModal);
 $("closeProductModalBtn").addEventListener("click", () => { $("productModal").hidden = true; });
 
-$("productForm").addEventListener("submit", (e) => {
+$("productForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const editKey = $("editProductKey").value.trim();
   const name = $("prodName").value.trim();
@@ -850,6 +1041,33 @@ $("productForm").addEventListener("submit", (e) => {
     return;
   }
 
+  if (isBackendOnline) {
+    try {
+      const resp = await fetch(`${API_BASE}/api/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, category, emoji, price, cost, stock, edit_key: editKey })
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        toast(data.error || "เกิดข้อผิดพลาดในการบันทึกสินค้า", "error");
+        Sound.warn();
+        return;
+      }
+      products = data.products;
+      toast(editKey ? `แก้ไขข้อมูล "${name}" เรียบร้อย (บันทึกใน SQLite)` : `เพิ่มสินค้าใหม่ "${name}" เรียบร้อย (บันทึกใน SQLite)`, "ok");
+      Sound.success();
+      $("productModal").hidden = true;
+      saveState();
+      refresh();
+      return;
+    } catch (err) {
+      console.warn("API product error:", err);
+      toast("เชื่อมต่อเซิร์ฟเวอร์ล้มเหลว บันทึกแบบออฟไลน์", "warn");
+    }
+  }
+
+  // Fallback Local
   if (editKey && products[editKey]) {
     products[editKey].category = category;
     products[editKey].emoji = emoji;
@@ -872,8 +1090,29 @@ $("productForm").addEventListener("submit", (e) => {
   refresh();
 });
 
-$("resetBtn").addEventListener("click", () => {
-  if (confirm("ต้องการรีเซ็ตสต็อก เมนู และประวัติทั้งหมดกลับเป็นค่าเริ่มต้นหรือไม่?")) {
+$("resetBtn").addEventListener("click", async () => {
+  if (confirm("ต้องการรีเซ็ตสต็อก เมนู และประวัติทั้งหมดกลับเป็นค่าเริ่มต้นหรือไม่? (หากเชื่อมต่อเซิร์ฟเวอร์ ข้อมูลในฐานข้อมูล SQLite จะถูกรีเซ็ตด้วย)")) {
+    if (isBackendOnline) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/reset`, { method: "POST" });
+        const data = await resp.json();
+        if (data.ok) {
+          products = data.products;
+          historyBills = data.orders || [];
+          sold = data.summary?.sold || {};
+          cart = {};
+          saveState();
+          Sound.delete();
+          refresh();
+          toast("รีเซ็ตระบบและฐานข้อมูล SQLite เป็นค่าเริ่มต้นเรียบร้อย", "ok");
+          return;
+        }
+      } catch (e) {
+        console.warn("Reset error:", e);
+      }
+    }
+
+    // Fallback Local
     products = JSON.parse(JSON.stringify(INITIAL_PRODUCTS));
     cart = {};
     historyBills = [];
@@ -968,7 +1207,26 @@ $("exportCsvBtn").addEventListener("click", () => {
 });
 
 // Demo Data Simulator (Generate 30 realistic sales bills)
-$("demoDataBtn").addEventListener("click", () => {
+$("demoDataBtn").addEventListener("click", async () => {
+  if (isBackendOnline) {
+    try {
+      toast("กำลังสร้างข้อมูลจำลอง 30 บิลลงฐานข้อมูล SQLite...", "info");
+      const resp = await fetch(`${API_BASE}/api/demo-data`, { method: "POST" });
+      const data = await resp.json();
+      if (data.ok) {
+        products = data.products;
+        historyBills = data.orders || [];
+        sold = data.summary?.sold || {};
+        saveState();
+        Sound.success();
+        refresh();
+        toast("⚡ จำลองข้อมูล 30 บิล บันทึกลง SQLite และตัดสต็อกเรียบร้อย! สลับไปดูแท็บ AI ได้เลย", "ok");
+        return;
+      }
+    } catch (e) {
+      console.warn("Backend demo data error:", e);
+    }
+  }
   generateDemoSalesData();
 });
 
@@ -1306,26 +1564,44 @@ function renderReorderRecommendations() {
 }
 
 // 1-Click Auto Restock
-$("autoRestockBtn").addEventListener("click", () => {
-  let restockedCount = 0;
-  Object.entries(products).forEach(([name, p]) => {
-    if (p.stock < 8) {
-      const addAmount = 15 - p.stock;
-      p.stock += addAmount;
-      restockedCount++;
-    }
-  });
-
-  if (restockedCount > 0) {
-    saveState();
-    Sound.success();
-    runAutonomousAnalytics();
-    renderProducts();
-    renderInventory();
-    toast(`⚡ AI ดำเนินการเติมสต็อกสินค้าที่ขาดให้เรียบร้อยแล้ว (${restockedCount} รายการ)`, "ok");
-  } else {
+$("autoRestockBtn").addEventListener("click", async () => {
+  const needs = Object.entries(products).filter(([, p]) => p.stock < 8);
+  if (needs.length === 0) {
     toast("สต็อกทุกรายการอยู่ในระดับที่เหมาะสมแล้ว");
+    return;
   }
+
+  if (isBackendOnline) {
+    toast("กำลังเติมสต็อกตามที่ AI แนะนำลง SQLite...", "info");
+    for (const [name, p] of needs) {
+      const addAmount = 15 - p.stock;
+      try {
+        await fetch(`${API_BASE}/api/products/adjust-stock`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, delta: addAmount })
+        });
+      } catch (e) {
+        console.warn("Restock error:", e);
+      }
+    }
+    // โหลดข้อมูลล่าสุดจากเซิร์ฟเวอร์
+    try {
+      const res = await fetch(`${API_BASE}/api/products`).then(r => r.json());
+      if (res.ok && res.products) products = res.products;
+    } catch (e) {}
+  } else {
+    needs.forEach(([, p]) => {
+      p.stock += (15 - p.stock);
+    });
+  }
+
+  saveState();
+  Sound.success();
+  runAutonomousAnalytics();
+  renderProducts();
+  renderInventory();
+  toast(`⚡ AI ดำเนินการเติมสต็อกสินค้าที่ขาดให้เรียบร้อยแล้ว (${needs.length} รายการ)`, "ok");
 });
 
 /* BCG Matrix Engine */
